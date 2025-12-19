@@ -1,0 +1,290 @@
+here<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Watch & EARN</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<!-- Telegram WebApp -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- Monetag Ads -->
+<script src='//libtl.com/sdk.js' data-zone='10327455' data-sdk='show_10327455'></script>
+
+<style>
+body{
+  margin:0;
+  font-family:Arial, sans-serif;
+  background:#0f0f0f;
+  color:#fff;
+}
+header{
+  padding:12px;
+  text-align:center;
+  background:#151515;
+  font-size:20px;
+  font-weight:bold;
+}
+nav{
+  position:fixed;
+  bottom:0;
+  width:100%;
+  display:flex;
+  background:#151515;
+}
+nav button{
+  flex:1;
+  padding:10px;
+  background:none;
+  border:none;
+  color:#aaa;
+  font-size:14px;
+}
+nav button.active{color:#00ffcc;}
+.section{
+  display:none;
+  padding:15px;
+  padding-bottom:70px;
+}
+.section.active{display:block;}
+.card{
+  background:#1c1c1c;
+  padding:15px;
+  border-radius:10px;
+  margin-bottom:12px;
+}
+.usdt{
+  width:120px;
+  margin:auto;
+  animation:bounce 2s infinite;
+}
+@keyframes bounce{
+  0%,100%{transform:scale(1);}
+  50%{transform:scale(1.15);}
+}
+.coin-float{
+  position:absolute;
+  color:#ffd700;
+  animation:float 1s forwards;
+}
+@keyframes float{
+  from{opacity:1;transform:translateY(0);}
+  to{opacity:0;transform:translateY(-50px);}
+}
+input,button{
+  width:100%;
+  padding:10px;
+  margin-top:8px;
+  border-radius:6px;
+  border:none;
+}
+button{
+  background:#00ffcc;
+  color:#000;
+  font-weight:bold;
+}
+small{color:#aaa;}
+.admin{border:1px solid #ff0066;}
+</style>
+</head>
+
+<body>
+
+<header>💰 Watch & EARN</header>
+
+<!-- WATCH & EARN -->
+<div id="watch" class="section active">
+  <div class="card" style="text-align:center">
+    <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" class="usdt">
+    <h2>Coins: <span id="coins">0</span></h2>
+    <h3>Level: <span id="level">0</span></h3>
+    <button onclick="watchAd()">▶ Watch Ad (+50)</button>
+  </div>
+</div>
+
+<!-- TASKS -->
+<div id="tasks" class="section">
+  <div id="taskList"></div>
+  <div class="card">
+    🔗 Referral Link  
+    <input id="refLink" readonly>
+    <small>Per referral +1000 coins</small>
+  </div>
+</div>
+
+<!-- WITHDRAW -->
+<div id="withdraw" class="section">
+  <div class="card">
+    <h3>💸 Withdraw USDT</h3>
+    <input id="wallet" placeholder="USDT Wallet Address">
+    <button onclick="requestWithdraw()">Submit Request</button>
+    <small>120,000 Coins = 10 USDT</small>
+  </div>
+</div>
+
+<!-- PROFILE -->
+<div id="profile" class="section">
+  <div class="card" style="text-align:center">
+    <img id="photo" width="80" style="border-radius:50%">
+    <h3 id="username"></h3>
+    <p>ID: <span id="uid"></span></p>
+    <p>Coins: <span id="pcoins"></span></p>
+    <p>Level: <span id="plevel"></span></p>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="admin" class="section admin">
+  <div class="card">
+    <h3>👑 Admin Dashboard</h3>
+    <p>Total Users: <span id="totalUsers">0</span></p>
+    <p>Total Coins: <span id="totalCoins">0</span></p>
+  </div>
+
+  <div class="card">
+    <h4>Add Task</h4>
+    <input id="taskName" placeholder="Task name">
+    <input id="taskReward" placeholder="Reward coins">
+    <input id="taskLink" placeholder="Task link">
+    <button onclick="addTask()">Add Task</button>
+  </div>
+
+  <div class="card">
+    <h4>Withdraw Requests</h4>
+    <div id="withdrawList"></div>
+  </div>
+</div>
+
+<nav>
+  <button onclick="show('watch')" class="active">🎬 Watch</button>
+  <button onclick="show('tasks')">📋 Tasks</button>
+  <button onclick="show('withdraw')">💸 Withdraw</button>
+  <button onclick="show('profile')">👤 Profile</button>
+</nav>
+
+<script>
+/* ---------------- FIREBASE CONFIG ---------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyAq_RfwjuJohcSBq3jL_XNMBIQRbk4Xc3E",
+  authDomain: "telegram-c8b63.firebaseapp.com",
+  projectId: "telegram-c8b63",
+  storageBucket: "telegram-c8b63.firebasestorage.app",
+  messagingSenderId: "641107367642",
+  appId: "1:641107367642:web:9e119becc321d3d9c3f7e3"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* ---------------- USER INIT ---------------- */
+const tg = window.Telegram?.WebApp;
+const user = tg?.initDataUnsafe?.user || {
+  id: "guest_"+Math.random(),
+  username: "Guest",
+  photo_url:""
+};
+
+let data = JSON.parse(localStorage.getItem("userData")) || {
+  coins:0, level:0
+};
+
+function sync(){
+  localStorage.setItem("userData",JSON.stringify(data));
+  db.collection("users").doc(String(user.id)).set({
+    ...data,
+    username:user.username
+  },{merge:true});
+  updateUI();
+}
+
+function updateUI(){
+  coins.innerText = data.coins;
+  level.innerText = data.level;
+  pcoins.innerText = data.coins;
+  plevel.innerText = data.level;
+}
+
+db.collection("users").doc(String(user.id)).get().then(d=>{
+  if(d.exists) data = d.data();
+  sync();
+});
+
+/* ---------------- WATCH AD ---------------- */
+function watchAd(){
+  show_10327455(); // monetag
+  credit(50);
+}
+
+function credit(c){
+  data.coins += c;
+  data.level = Math.floor(data.coins / 10000);
+  sync();
+}
+
+/* ---------------- TASKS ---------------- */
+db.collection("tasks").onSnapshot(s=>{
+  taskList.innerHTML="";
+  s.forEach(t=>{
+    let d=t.data();
+    taskList.innerHTML+=`
+    <div class="card">
+      <b>${d.name}</b><br>
+      Reward: ${d.reward} 🪙<br>
+      <button onclick="completeTask('${t.id}',${d.reward},'${d.link}')">Do Task</button>
+    </div>`;
+  });
+});
+
+function completeTask(id,reward,link){
+  window.open(link,"_blank");
+  credit(reward); // real verify requires backend/bot
+}
+
+/* ---------------- REFERRAL ---------------- */
+refLink.value = location.origin+"?ref="+user.id;
+
+/* ---------------- WITHDRAW ---------------- */
+function requestWithdraw(){
+  db.collection("withdrawals").add({
+    uid:user.id,
+    wallet:wallet.value,
+    coins:data.coins,
+    status:"Pending"
+  });
+  alert("Request submitted");
+}
+
+/* ---------------- ADMIN ---------------- */
+const isAdmin = location.search.includes("admin=1") && !tg;
+if(isAdmin){
+  admin.classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.style.display="none");
+}
+
+function addTask(){
+  db.collection("tasks").add({
+    name:taskName.value,
+    reward:Number(taskReward.value),
+    link:taskLink.value
+  });
+}
+
+/* ---------------- NAV ---------------- */
+function show(id){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  event.target.classList.add("active");
+}
+
+/* ---------------- PROFILE ---------------- */
+uid.innerText=user.id;
+username.innerText="@"+(user.username||"Guest");
+if(user.photo_url) photo.src=user.photo_url;
+</script>
+
+</body>
+</html>
